@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Trace</title>
+  <desc id="desc">A simple rose footprint on a pale pink background.</desc>
+  <rect width="512" height="512" fill="#FBE4EA"/>
+  <g fill="#8A4257" transform="translate(78 62) rotate(-18 178 196)">
+    <ellipse cx="191" cy="269" rx="92" ry="116"/>
+    <ellipse cx="96" cy="139" rx="42" ry="53"/>
+    <ellipse cx="166" cy="88" rx="38" ry="48"/>
+    <ellipse cx="242" cy="87" rx="35" ry="45"/>
+    <ellipse cx="307" cy="132" rx="31" ry="40"/>
+  </g>
+</svg>

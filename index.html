@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="A quiet, chronological view of the clips saved during each day.">
+  <meta name="theme-color" content="#FDF7F8">
+  <meta name="color-scheme" content="light">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Trace">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.github.com; font-src 'self'; img-src 'self' data:; manifest-src 'self'; object-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Trace</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="icon" href="./icons/icon-192.png" sizes="192x192">
+  <link rel="icon" href="./icons/icon-512.png" sizes="512x512">
+  <link rel="stylesheet" href="./assets/app.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+
+  <noscript>
+    <p class="noscript">Trace needs JavaScript to show saved entries.</p>
+  </noscript>
+
+  <div class="app-shell">
+    <header class="app-bar">
+      <a class="brand" href="./" aria-label="Trace home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <path d="M9.1 13.5c-2.2 1.1-3.4 3.5-2.5 5.3.9 1.7 3.5 2.1 5.7.9 2.2-1.1 3.4-3.5 2.5-5.3-.9-1.7-3.5-2.1-5.7-.9Z"/>
+            <circle cx="7" cy="9" r="1.7"/>
+            <circle cx="10.4" cy="6.1" r="1.55"/>
+            <circle cx="14.3" cy="5.6" r="1.45"/>
+            <circle cx="17.1" cy="8.2" r="1.35"/>
+          </svg>
+        </span>
+        <span>trace</span>
+      </a>
+      <button class="icon-text-button" id="settings-open" type="button" aria-label="Open Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="3.1"/>
+          <path d="M19.1 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.4-2.4 1a8.5 8.5 0 0 0-2.6-1.5L13.8 2h-4l-.4 3.1a8.5 8.5 0 0 0-2.6 1.5l-2.4-1-2 3.4 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.4 2.4-1a8.5 8.5 0 0 0 2.6 1.5l.4 3.1h4l.4-3.1a8.5 8.5 0 0 0 2.6-1.5l2.4 1 2-3.4-2.1-1.5Z"/>
+        </svg>
+        <span>Settings</span>
+      </button>
+    </header>
+
+    <main id="main-content">
+      <section class="screen day-screen" id="day-screen" aria-labelledby="date-heading">
+        <div class="date-controls" aria-label="Choose a day">
+          <button class="round-button" id="previous-day" type="button" aria-label="Previous day">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m15 5-7 7 7 7"/></svg>
+          </button>
+          <div class="date-center">
+            <button class="today-button" id="today-button" type="button">Today</button>
+            <h1 id="date-heading" tabindex="-1">Monday, August 3, 2026</h1>
+          </div>
+          <button class="round-button" id="next-day" type="button" aria-label="Next day">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+        </div>
+
+        <p class="connection-line" id="connection-line" role="status" hidden>Offline · cached data is shown</p>
+
+        <div class="timeline-wrap">
+          <ol class="timeline" id="timeline" aria-label="Day timeline"></ol>
+          <p class="empty-state" id="empty-state" hidden>No entries this day</p>
+        </div>
+
+        <p class="day-summary" id="day-summary" aria-live="polite"></p>
+
+        <div class="memo-dock">
+          <label class="visually-hidden" for="memo-input">One line for this day</label>
+          <input id="memo-input" type="text" maxlength="240" placeholder="One line (optional)" autocomplete="off">
+          <svg class="memo-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="m5 19 1-4L16.7 4.3a2.1 2.1 0 0 1 3 3L9 18l-4 1Z"/><path d="m14.8 6.2 3 3M6 15l3 3"/>
+          </svg>
+        </div>
+      </section>
+
+      <section class="screen settings-screen" id="settings-screen" aria-labelledby="settings-heading" hidden>
+        <div class="settings-titlebar">
+          <span aria-hidden="true"></span>
+          <h1 id="settings-heading">Settings</h1>
+          <button class="text-button" id="settings-close" type="button">Done</button>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-block token-block">
+            <label class="settings-label" for="token-input">GitHub token</label>
+            <input class="settings-input" id="token-input" type="password" autocomplete="off" spellcheck="false" placeholder="Paste token">
+            <p class="settings-value" id="token-status">Not saved</p>
+            <div class="button-row">
+              <button class="outline-button" id="token-save" type="button">Save</button>
+              <button class="outline-button" id="token-clear" type="button">Clear</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div>
+              <h2>Context</h2>
+              <p id="context-value">Unnamed</p>
+            </div>
+            <button class="outline-button" id="context-change" type="button">Change</button>
+          </div>
+
+          <div class="settings-block sync-block">
+            <div class="settings-row compact-row">
+              <h2>Sync</h2>
+              <button class="outline-button" id="refresh-button" type="button">Refresh</button>
+            </div>
+            <p id="updated-status">Not refreshed</p>
+            <p id="error-status">No errors</p>
+            <p id="outbox-status">0 to send</p>
+          </div>
+
+          <div class="settings-block text-size-block">
+            <h2>Text size</h2>
+            <div class="size-picker" id="size-picker" role="group" aria-label="Text size">
+              <button type="button" data-size="6" aria-pressed="false">6</button>
+              <button type="button" data-size="8" aria-pressed="false">8</button>
+              <button type="button" data-size="10" aria-pressed="false">10</button>
+              <button type="button" data-size="12" aria-pressed="true">12</button>
+              <button type="button" data-size="14" aria-pressed="false">14</button>
+              <button type="button" data-size="17" aria-pressed="false">17</button>
+            </div>
+            <button class="outline-button reset-button" id="size-reset" type="button">Reset</button>
+          </div>
+        </div>
+
+        <p class="settings-message" id="settings-message" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+  </div>
+
+  <dialog class="context-dialog" id="context-dialog" aria-labelledby="context-dialog-title">
+    <form class="context-dialog-card" id="context-form">
+      <h2 id="context-dialog-title">Name this context</h2>
+      <p>Use a short name for this browser storage, such as iphone or ipad.</p>
+      <label for="context-input">Context name</label>
+      <input class="settings-input" id="context-input" type="text" maxlength="40" autocomplete="off" placeholder="iphone or ipad">
+      <div class="dialog-actions">
+        <button class="outline-button" id="context-cancel" type="button">Cancel</button>
+        <button class="outline-button dialog-primary" type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
