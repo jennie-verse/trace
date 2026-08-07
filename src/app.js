@@ -18,7 +18,8 @@ const elements = {};
 
 const state = {
   selectedDate: localDateKey(new Date()),
-  clips: [],
+  // 파서 이름별 항목 목록입니다. PARSERS 의 키와 같은 이름을 씁니다.
+  items: { tide: [], clip: [] },
   remoteMemos: {},
   localDoc: { context: '', updatedAt: '', memos: {} },
   contextId: '',
@@ -33,6 +34,41 @@ const state = {
 };
 
 const PARSERS = Object.freeze({
+  // tide 는 현재 운영 중인 데이터원입니다.
+  // 만료된(7일간 손대지 않은) 항목만 tide/archive/<YYYY-MM>.json 배열로 쌓입니다.
+  // 레코드 모양: { id, kind: 'clip'|'dump', text, createdAt, archivedAt }
+  // 따라서 오늘·이번 주는 비어 있는 것이 정상입니다.
+  tide: Object.freeze({
+    async read(config, dirPath) {
+      let entries;
+      try {
+        entries = await Sync.listDir(config, `${dirPath}/archive`);
+      } catch (error) {
+        // archive 폴더가 아직 없으면 빈 목록으로 둡니다.
+        if (error && error.type === 'notfound') return [];
+        throw error;
+      }
+      const files = entries.filter((entry) => (
+        entry.type === 'file' && /^\d{4}-\d{2}\.json$/.test(entry.name)
+      ));
+      const documents = await Promise.all(files.map((entry) => readJsonArrayFile(config, entry.path)));
+      return mergeTideArchives(documents.filter(Boolean));
+    },
+    events(items, dateKey) {
+      return items
+        .filter((item) => localDateKey(new Date(item.createdAt)) === dateKey)
+        .map((item) => ({
+          id: `tide:${item.id}`,
+          app: 'TIDE',
+          at: item.createdAt,
+          title: item.kind === 'dump' ? 'Wrote a note' : 'Saved a clip',
+          detail: textPreview(item.text)
+        }));
+    }
+  }),
+  // clip 은 은퇴한 앱입니다. webapp-data 의 clip/ 폴더가 남아 있는 동안에만
+  // 과거 기록을 계속 볼 수 있도록 파서를 유지합니다.
+  // clip/ 폴더를 지우면 rootEntries 에 잡히지 않으므로 조용히 비활성화됩니다.
   clip: Object.freeze({
     async read(config, dirPath) {
       const entries = await Sync.listDir(config, dirPath);
@@ -44,7 +80,7 @@ const PARSERS = Object.freeze({
       return items
         .filter((item) => localDateKey(new Date(item.createdAt)) === dateKey)
         .map((item) => ({
-          id: item.id,
+          id: `clip:${item.id}`,
           app: 'CLIP',
           at: item.createdAt,
           title: 'Saved a clip',
@@ -53,6 +89,8 @@ const PARSERS = Object.freeze({
     }
   })
 });
+
+const PARSER_NAMES = Object.freeze(Object.keys(PARSERS));
 
 function byId(id) {
   return document.getElementById(id);
@@ -168,8 +206,44 @@ function formatRefreshTime(value) {
 function clipDetail(item) {
   const label = typeof item.label === 'string' ? item.label.trim() : '';
   if (label) return label;
-  const text = typeof item.text === 'string' ? item.text.trim() : '';
-  return Array.from(text).slice(0, 40).join('');
+  return textPreview(item.text);
+}
+
+// 한글은 코드 유닛이 아니라 글자 단위로 잘라야 조합 문자가 깨지지 않습니다.
+function textPreview(value) {
+  const text = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+  const characters = Array.from(text);
+  if (characters.length <= 40) return characters.join('');
+  return `${characters.slice(0, 40).join('')}…`;
+}
+
+function normalizeTideItem(raw) {
+  if (!validObject(raw) || typeof raw.id !== 'string' || !raw.id.trim()) return null;
+  if (typeof raw.text !== 'string' || !validIso(raw.createdAt)) return null;
+  return {
+    id: raw.id,
+    kind: raw.kind === 'dump' ? 'dump' : 'clip',
+    text: raw.text,
+    createdAt: raw.createdAt,
+    archivedAt: validIso(raw.archivedAt) ? raw.archivedAt : ''
+  };
+}
+
+// 같은 id 가 여러 달 파일에 남아 있으면 가장 나중에 보관된 것만 남깁니다.
+function mergeTideArchives(documents) {
+  const items = new Map();
+  documents.forEach((records) => {
+    if (!Array.isArray(records)) return;
+    records.forEach((raw) => {
+      const item = normalizeTideItem(raw);
+      if (!item) return;
+      const current = items.get(item.id);
+      if (!current || isoMillis(item.archivedAt) > isoMillis(current.archivedAt)) {
+        items.set(item.id, item);
+      }
+    });
+  });
+  return Array.from(items.values());
 }
 
 function normalizeClip(raw) {
@@ -281,6 +355,18 @@ async function readJsonFile(syncConfig, path) {
   }
 }
 
+async function readJsonArrayFile(syncConfig, path) {
+  try {
+    const result = await Sync.readFile(syncConfig, path);
+    if (!result.exists || !result.content) return null;
+    const parsed = JSON.parse(result.content);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (error) {
+    if (error instanceof SyntaxError) return null;
+    throw error;
+  }
+}
+
 function loadSettings() {
   const saved = parseJson(storageGet(APP.settingsKey, '{}'), {});
   const size = Number(saved.fontSize);
@@ -303,16 +389,26 @@ function applyFontSize() {
 function loadCache() {
   const cached = parseJson(storageGet(APP.cacheKey, '{}'), {});
   if (!validObject(cached)) return;
-  if (Array.isArray(cached.clips)) state.clips = cached.clips.map(normalizeClip).filter(Boolean);
+
+  // version 1 캐시는 clip 목록만 최상위 `clips` 키에 담았습니다. 그대로 이어받습니다.
+  const legacyClips = Array.isArray(cached.clips) ? cached.clips : null;
+  const items = validObject(cached.items) ? cached.items : {};
+
+  state.items = {
+    tide: Array.isArray(items.tide) ? items.tide.map(normalizeTideItem).filter(Boolean) : [],
+    clip: Array.isArray(items.clip)
+      ? items.clip.map(normalizeClip).filter(Boolean)
+      : (legacyClips ? legacyClips.map(normalizeClip).filter(Boolean) : [])
+  };
   state.remoteMemos = normalizeMemos(cached.memos);
   state.refreshedAt = validIso(cached.refreshedAt) ? cached.refreshedAt : '';
 }
 
 function saveCache() {
   storageSet(APP.cacheKey, JSON.stringify({
-    version: 1,
+    version: 2,
     refreshedAt: state.refreshedAt,
-    clips: state.clips,
+    items: state.items,
     memos: state.remoteMemos
   }));
 }
@@ -370,8 +466,13 @@ async function refreshRemote() {
         readParserData(syncConfig, rootEntries),
         readAllRemoteMemos(syncConfig)
       ]);
-      const clipResult = parserResults.find((result) => result.name === 'clip');
-      state.clips = clipResult ? clipResult.items : [];
+      // 폴더가 없는 데이터원은 결과에 안 잡히므로 빈 배열로 둡니다.
+      const nextItems = {};
+      PARSER_NAMES.forEach((name) => {
+        const result = parserResults.find((entry) => entry.name === name);
+        nextItems[name] = result ? result.items : [];
+      });
+      state.items = nextItems;
       state.remoteMemos = memos;
       state.refreshedAt = new Date().toISOString();
       state.lastError = '';
@@ -392,8 +493,10 @@ async function refreshRemote() {
 
 function eventsForDate(dateKey) {
   const events = [];
-  Object.entries(PARSERS).forEach(([name, parser]) => {
-    if (name === 'clip') events.push(...parser.events(state.clips, dateKey));
+  PARSER_NAMES.forEach((name) => {
+    const items = state.items[name];
+    if (!Array.isArray(items) || items.length === 0) return;
+    events.push(...PARSERS[name].events(items, dateKey));
   });
   events.sort((a, b) => isoMillis(a.at) - isoMillis(b.at));
   return events;
@@ -444,7 +547,7 @@ function renderTimeline(events) {
   elements['empty-state'].hidden = !empty;
   elements['day-summary'].textContent = empty
     ? ''
-    : `${events.length} clip${events.length === 1 ? '' : 's'} saved`;
+    : `${events.length} entr${events.length === 1 ? 'y' : 'ies'}`;
 }
 
 function renderMemo() {
