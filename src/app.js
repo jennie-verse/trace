@@ -591,7 +591,7 @@ async function refreshOutboxCount() {
 
 function renderSettings() {
   renderTokenStatus();
-  elements['context-value'].textContent = Sync.getContextLabel(APP.namespace) || state.contextId || 'Unnamed';
+  elements['context-value'].textContent = Sync.getContextLabel(APP.namespace) || 'Not named yet — tap Change';
   elements['updated-status'].textContent = formatRefreshTime(state.refreshedAt);
   elements['error-status'].textContent = state.lastError || 'No errors';
   elements['error-status'].dataset.error = String(Boolean(state.lastError));
@@ -762,7 +762,8 @@ function bindEvents() {
 
   elements['token-clear'].addEventListener('click', () => {
     if (!storageGet(APP.tokenKey)) return;
-    if (!window.confirm('Clear the saved GitHub token?')) return;
+    // One token key per origin, so Atlas and Tide read the same value as Trace.
+    if (!window.confirm('Clear the saved GitHub token?\n\nAtlas and Tide share this token — clearing it stops their sync too.')) return;
     storageRemove(APP.tokenKey);
     state.lastError = '';
     setSettingsMessage('Token cleared.');
@@ -831,7 +832,11 @@ function bindEvents() {
 }
 
 async function ensureContext() {
-  state.contextId = await Sync.ensureContextId(APP.namespace, () => requestContextName(''));
+  // No prompt on first launch. Asking someone to name a "browser storage context"
+  // before they have seen the app is a poor first screen, and the name is only
+  // needed once sync is set up — Settings › Context › Change covers that.
+  // Omitting the prompt makes ensureContextId generate an unnamed id instead.
+  state.contextId = await Sync.ensureContextId(APP.namespace);
   loadLocalDoc();
 }
 

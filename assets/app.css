@@ -480,6 +480,11 @@ button:disabled {
   color: var(--muted);
 }
 
+.settings-hint {
+  font-size: max(var(--body-size), 11px);
+  color: var(--faint);
+}
+
 .token-block .settings-input {
   margin-top: 10px;
   padding-right: 14px;
