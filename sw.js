@@ -1,4 +1,4 @@
-const CACHE_NAME = 'trace-shell-v7';
+const CACHE_NAME = 'trace-shell-v8';
 
 const PRECACHE_URLS = [
   './',
@@ -16,6 +16,7 @@ const PRECACHE_URLS = [
   './docs/README-KO.md',
   './docs/USER-GUIDE-KO.md',
   './docs/TEST-REPORT.md',
+  './docs/GITHUB-PAGES-KO.md',
   '../shared/v1/sync.js'
 ];
 
