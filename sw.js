@@ -1,4 +1,4 @@
-const CACHE_NAME = 'trace-shell-v9';
+const CACHE_NAME = 'trace-shell-v10';
 
 const PRECACHE_URLS = [
   './',

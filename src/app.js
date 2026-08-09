@@ -14,12 +14,24 @@ const APP = Object.freeze({
   fontSizes: [6, 8, 10, 12, 14, 17]
 });
 
+/* ── events 파서용 상수 ─────────────────────────────────────────────────
+   events/ 는 한 단계 평면 폴더입니다. 파일 이름은 <app>.<ctx>.YYYY-MM.json
+   한 가지뿐이고, 여기에 맞지 않는 항목(.gitkeep 등)은 전부 무시합니다.
+
+   읽는 범위를 최근 3개월로 묶어 둡니다. 이벤트 파일은 앱 × 컨텍스트 × 달마다
+   하나씩 생기므로 제한이 없으면 새로고침 한 번에 요청이 수백 회로 늘어납니다.
+   그보다 오래된 날을 열면 그날의 이벤트는 비어 보입니다.
+   ────────────────────────────────────────────────────────────────────── */
+const EVENT_FILE_PATTERN = /^([a-z][a-z0-9-]*)\.([a-z0-9-]+)\.(\d{4}-\d{2})\.json$/;
+const EVENT_APP_PATTERN = /^[a-z][a-z0-9-]{0,15}$/;
+const EVENT_MONTHS_WINDOW = 3;
+
 const elements = {};
 
 const state = {
   selectedDate: localDateKey(new Date()),
   // 파서 이름별 항목 목록입니다. PARSERS 의 키와 같은 이름을 씁니다.
-  items: { tide: [], clip: [] },
+  items: { tide: [], clip: [], events: [] },
   remoteMemos: {},
   localDoc: { context: '', updatedAt: '', memos: {} },
   contextId: '',
@@ -85,6 +97,35 @@ const PARSERS = Object.freeze({
           at: item.createdAt,
           title: 'Saved a clip',
           detail: clipDetail(item)
+        }));
+    }
+  }),
+  // events 는 앱들이 공통 모양으로 남기는 활동 기록입니다. 앱마다 파서를 따로
+  // 두지 않기 위한 층이라, 새 앱이 늘어도 이 파서 하나만 유지하면 됩니다.
+  // 파일: events/<app>.<ctx>.YYYY-MM.json — 이벤트 객체의 배열
+  // 레코드 모양: { v: 1, id, app, kind, at, title, detail?, ref?, deleted? }
+  // events/ 폴더가 없으면 rootEntries 에 잡히지 않으므로 조용히 비활성화됩니다.
+  events: Object.freeze({
+    async read(config, dirPath) {
+      const entries = await Sync.listDir(config, dirPath);
+      const months = recentMonthKeys(EVENT_MONTHS_WINDOW);
+      const files = entries.filter((entry) => {
+        if (entry.type !== 'file') return false;
+        const matched = EVENT_FILE_PATTERN.exec(entry.name);
+        return Boolean(matched) && months.has(matched[3]);
+      });
+      const documents = await Promise.all(files.map((entry) => readJsonArrayFile(config, entry.path)));
+      return mergeEventArrays(documents.filter(Boolean));
+    },
+    events(items, dateKey) {
+      return items
+        .filter((item) => localDateKey(new Date(item.at)) === dateKey)
+        .map((item) => ({
+          id: `events:${item.id}`,
+          app: item.app.toUpperCase(),
+          at: item.at,
+          title: item.title,
+          detail: item.detail ? textPreview(item.detail) : ''
         }));
     }
   })
@@ -215,6 +256,55 @@ function textPreview(value) {
   const characters = Array.from(text);
   if (characters.length <= 40) return characters.join('');
   return `${characters.slice(0, 40).join('')}…`;
+}
+
+// 오늘이 속한 달부터 거슬러 올라가며 'YYYY-MM' 키를 만듭니다. 로컬 시각 기준입니다.
+function recentMonthKeys(monthCount) {
+  const keys = new Set();
+  const now = new Date();
+  for (let back = 0; back < monthCount; back += 1) {
+    const month = new Date(now.getFullYear(), now.getMonth() - back, 1);
+    keys.add(`${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`);
+  }
+  return keys;
+}
+
+function normalizeEvent(raw) {
+  if (!validObject(raw)) return null;
+  // 모르는 스키마 버전은 조용히 건너뜁니다.
+  if (raw.v !== 1) return null;
+  if (typeof raw.id !== 'string' || !raw.id.trim()) return null;
+  if (!validIso(raw.at)) return null;
+
+  const title = typeof raw.title === 'string' ? raw.title.trim() : '';
+  if (!title) return null;
+
+  const detail = typeof raw.detail === 'string' ? raw.detail.trim() : '';
+  return {
+    id: raw.id,
+    app: typeof raw.app === 'string' && EVENT_APP_PATTERN.test(raw.app) ? raw.app : 'app',
+    at: raw.at,
+    title: title.slice(0, 120),
+    detail: detail.slice(0, 400),
+    deleted: raw.deleted === true
+  };
+}
+
+// 추가만 하는 파일이라 나중에 적힌 것이 최신입니다. 취소(deleted)도 같은 id 로
+// 뒤에 붙으므로 마지막에 본 것을 채택하고, 취소된 것은 목록에서 뺍니다.
+function mergeEventArrays(documents) {
+  const newest = new Map();
+  documents.forEach((entries) => {
+    entries.forEach((raw) => {
+      const event = normalizeEvent(raw);
+      if (!event) return;
+      const previous = newest.get(event.id);
+      if (!previous || isoMillis(event.at) >= isoMillis(previous.at)) {
+        newest.set(event.id, event);
+      }
+    });
+  });
+  return [...newest.values()].filter((event) => !event.deleted);
 }
 
 function normalizeTideItem(raw) {
@@ -398,7 +488,8 @@ function loadCache() {
     tide: Array.isArray(items.tide) ? items.tide.map(normalizeTideItem).filter(Boolean) : [],
     clip: Array.isArray(items.clip)
       ? items.clip.map(normalizeClip).filter(Boolean)
-      : (legacyClips ? legacyClips.map(normalizeClip).filter(Boolean) : [])
+      : (legacyClips ? legacyClips.map(normalizeClip).filter(Boolean) : []),
+    events: Array.isArray(items.events) ? items.events.map(normalizeEvent).filter(Boolean) : []
   };
   state.remoteMemos = normalizeMemos(cached.memos);
   state.refreshedAt = validIso(cached.refreshedAt) ? cached.refreshedAt : '';
