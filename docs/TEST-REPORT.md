@@ -1,7 +1,7 @@
 # Trace — Test Report
 
 검토일: 2026-08-03
-검토 방식: 로컬 정적 서버(`python3 -m http.server`, `Deliverable/` 루트에서 실행)로 `http://localhost:8765/trace/`를 열어 확인. `../../shared/v1/sync.js` 상대 경로가 GitHub Pages와 동일한 폴더 구조(`Deliverable/trace`, `Deliverable/shared`)에서 정상 해석되는 것을 전제로 함. (Atlas 검토 이후 `.claude/launch.json`에 `trace-preview`(포트 4176) 항목도 추가함.)
+당시 검토 방식: 2026-08-03에는 별도 `Deliverable/` staging에서 확인했습니다. 현재 재실행할 때는 `WebApp/Published/`에서 `python3 -m http.server 4176`을 실행하고 `http://localhost:4176/trace/`를 엽니다. 이 구조에서 `trace/`와 `shared/`가 형제 폴더가 되어 실제 GitHub Pages의 `../../shared/v1/sync.js` 해석 결과를 재현합니다.
 
 ## 1. 코드 검토에서 발견해 고친 문제
 
@@ -29,7 +29,7 @@ ChatGPT가 만든 원본 코드(`index.html`, `src/app.js`, `assets/app.css`, `s
 3. **CSP**: Atlas와 동일한 `Content-Security-Policy` 메타 태그를 `index.html`에 추가.
 4. **Service Worker**: `PRECACHE_URLS`에 새 폰트·아이콘·라이선스·`docs/TEST-REPORT.md`를 추가하고, `fetch` 핸들러를 스코프 기준으로 좁힘. 캐시 내용이 바뀌었으므로 `CACHE_NAME`을 `trace-shell-v5` → `trace-shell-v6`로 올림 (이전 캐시 자동 제거).
 5. **문서**: `README-KO.md`의 파일 구조·폰트 경로 설명을 실제 파일과 일치하도록 갱신.
-6. **테스트 서버 설정**: `.claude/launch.json`에 `trace-preview`(포트 4176, `Deliverable/` 루트 기준 `python3 -m http.server`) 항목 추가.
+6. **당시 테스트 서버 설정**: `.claude/launch.json`의 `trace-preview`는 2026-08-03 작업 환경에 있던 보조 설정입니다. 현재 저장소에는 포함되지 않으므로 위의 `Published/` 루트 명령을 사용합니다.
 
 ## 3. 통과 항목 (로컬 확인 완료)
 
